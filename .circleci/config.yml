@@ -109,8 +109,7 @@ jobs:
       - checkout
       - setup_remote_docker
       - run: sudo apt-get update && sudo apt-get install -y gettext-base
-      - run: cat kubernetes/deployment.yml | envsubst > kubernetes/deployment-final.yml
-      - run: cat kubernetes/deployment-final.yml
+      - run: cat kubernetes/deployment.yml
       - aws-eks/update-kubeconfig-with-authenticator:
           cluster-name: basic-cluster1
           aws-region: "${AWS_REGION}"

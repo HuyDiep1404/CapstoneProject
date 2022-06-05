@@ -1,0 +1,32 @@
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: capstoneapp
+spec:
+  selector:
+    matchLabels:
+      app: capstoneapp
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: capstoneapp
+    spec:
+      containers:
+      - name: capstoneapp
+        image: ${IMAGE}:${CIRCLE_SHA1}
+        ports:
+        - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: capstoneapi
+spec:
+  type: LoadBalancer
+  selector:
+    app: capstoneapp
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

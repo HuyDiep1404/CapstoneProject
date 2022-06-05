@@ -1,0 +1,12 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: basic-cluster1
+  region: us-east-1
+
+nodeGroups:
+  - name: node
+    instanceType: m5.large
+    desiredCapacity: 1
+    volumeSize: 30

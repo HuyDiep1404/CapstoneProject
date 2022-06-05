@@ -50,7 +50,7 @@ jobs:
           name: Set up tag 
           command: echo "export TAG=0.1.$CIRCLE_SHA1" >> $BASH_ENV
       - run: 
-          name: Build Docker image
+          name: Build Docker file
           command: |
             docker build -f Dockerfile.build --tag=$TAG .
   aws_create_cluster:

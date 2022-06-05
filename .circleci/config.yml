@@ -1,0 +1,143 @@
+version: 2.1
+orbs:
+  aws-cli: circleci/aws-cli@2.1
+  docker: circleci/docker@0.5.13
+  node: circleci/node@4.0.0
+  kubernetes: circleci/kubernetes@1.3.0
+  aws-eks: circleci/aws-eks@0.2.7
+
+jobs:
+  build_env_test:
+    docker:
+      - image: python:3.7.3-stretch
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "requirements.txt" }}
+            - v1-dependencies-
+      - run:
+          name: install dependencies
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            make install
+            wget -O /bin/hadolint https://github.com/hadolint/hadolint/releases/download/v1.16.3/hadolint-Linux-x86_64 &&\
+            chmod +x /bin/hadolint
+            
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-{{ checksum "requirements.txt" }}
+      - run:
+          name: run lint
+          command: |
+            . venv/bin/activate
+            make lint 
+  build_docker_web_react:
+    docker:
+      - image: cimg/node:16.0.0
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: 
+          name: Build node
+          command: |
+            npm i            
+      - run: 
+          name: Set up tag 
+          command: echo "export TAG=0.1.$CIRCLE_SHA1" >> $BASH_ENV
+      - run: 
+          name: Build Docker image
+          command: |
+            docker build -f Dockerfile.build --tag=$TAG .
+  aws_create_cluster:
+    docker:
+      -  image: amazon/aws-cli
+    steps:
+      - checkout
+      - run: yum install -y tar gzip
+      - run:
+          name: create cluster
+          command: |
+            ls
+            echo $(pwd)           
+            cd /tmp
+            ls
+            echo $(pwd)
+            curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+            ls
+            mv /tmp/eksctl /usr/local/bin
+            eksctl version
+            curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+            chmod +x ./kubectl
+            mv ./kubectl /usr/local/bin/kubectl
+            kubectl version --client
+            cd ~
+            ls
+            cd project
+            ls
+            echo $(pwd)
+            #eksctl create cluster -f cluster.yaml
+  docker_run_publish:
+    docker:
+      - image: docker:18.09-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:         
+          name: run and upload docker container
+          command: | 
+            chmod 777 run_docker.sh
+            chmod 777 upload_docker.sh 
+            ls
+            docker --version
+            docker swarm init     
+            docker login --username ${DOCKER_HUB_USERNAME} --password ${DOCKER_HUB_ACCESS_TOKEN}
+            docker build --tag=capstone .
+            docker image ls
+            export dockerpath="2001191203/capstone"
+            docker tag capstone $dockerpath
+            echo "Docker ID and Image: $dockerpath"
+            docker push $dockerpath
+  
+  docker_kubectl_using:
+    executor: aws-eks/python3
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run: sudo apt-get update && sudo apt-get install -y gettext-base
+      - run: cat kubernetes/deployment.yml | envsubst > kubernetes/deployment-final.yml
+      - run: cat kubernetes/deployment-final.yml
+      - aws-eks/update-kubeconfig-with-authenticator:
+          cluster-name: basic-cluster1
+          aws-region: "${AWS_REGION}"
+          install-kubectl: true
+      - run:
+          name: kubectl cluster
+          command: |
+            kubectl version --client
+            kubectl get nodes
+            export dockerpath="2001191203/capstone:latest"
+            #kubectl run flaskskearlndemo --image=$dockerpath --port=80
+            kubectl get deploy,rs,svc,pods
+            #kubectl port-forward flaskskearlndemo 8000:80
+workflows:
+  default:
+    jobs:
+      - build_env_test    
+      - build_docker_web_react  
+      - aws_create_cluster:
+          requires:
+            - build_env_test      
+      - docker_run_publish:
+          requires:
+            - aws_create_cluster   
+      - docker_kubectl_using:
+          requires:
+            - docker_run_publish
+      
+
+ 
